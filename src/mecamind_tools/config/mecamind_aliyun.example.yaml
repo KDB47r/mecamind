@@ -1,0 +1,5 @@
+# 阿里云 API 密钥配置模板。
+# 使用方法：复制为 mecamind_aliyun.local.yaml 再填入真实密钥。
+# *.local.yaml 不会被 setup.py 安装、也不应提交到 git（防止泄密）。
+aliyun:
+  api_key: "your_dashscope_api_key"

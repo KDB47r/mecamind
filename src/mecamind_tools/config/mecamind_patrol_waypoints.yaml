@@ -1,0 +1,32 @@
+# 多点巡航路线（第三课，mission_executor 的 patrol 意图使用）。
+#
+# 收到 {"intent":"patrol"} 后，机器人按 waypoints 顺序逐点导航，
+# 循环 loop_count 圈。坐标均为 map 坐标系（米/弧度）。
+# 与放大后的三室户命名目标一致。
+
+initial_pose:
+  frame_id: map
+  x: 0.0
+  y: 0.0
+  yaw: 0.0
+
+loop_count: 1
+goal_timeout_sec: 120.0
+wait_between_goals_sec: 1.5
+
+waypoints:
+  - name: hall_entry
+    frame_id: map
+    x: -3.6
+    y: -2.7
+    yaw: 0.0
+  - name: living_room
+    frame_id: map
+    x: 0.0
+    y: 0.6
+    yaw: 0.0
+  - name: bedroom
+    frame_id: map
+    x: 3.75
+    y: 0.9
+    yaw: 0.0

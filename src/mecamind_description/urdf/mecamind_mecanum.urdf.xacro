@@ -1,0 +1,134 @@
+<?xml version="1.0"?>
+<!--
+  MecaMind 机器人的 URDF 描述（xacro 格式）。
+
+  【这个文件是干什么的】
+  给 ROS 侧用的机器人"骨架图"：robot_state_publisher 读它来发布
+  各连杆之间的 TF（base_footprint -> base_link -> lidar_link 等），
+  RViz 读它来画机器人模型。物理仿真不用它——那是 Gazebo 侧
+  model.sdf 的事，但两边的几何尺寸必须一致。
+
+  【xacro 是什么】
+  xacro = XML 宏语言。property 定义可复用的常量，macro 定义可带
+  参数的模板（见下面 wheel 宏，一个模板生成四个轮子），launch 时
+  由 `xacro` 命令展开成纯 URDF。
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mecamind_mecanum">
+  <!-- 底盘几何常量：轮半径 7.5cm；轮心相对底盘中心 前后±0.20m、左右±0.17m。
+       这些值与 model.sdf 里的 wheelbase(0.40)/wheel_separation(0.34) 对应。 -->
+  <xacro:property name="wheel_radius" value="0.075"/>
+  <xacro:property name="wheel_width" value="0.045"/>
+  <xacro:property name="wheel_x" value="0.20"/>
+  <xacro:property name="wheel_y" value="0.17"/>
+
+  <material name="blue"><color rgba="0.08 0.32 0.80 1"/></material>
+  <material name="dark"><color rgba="0.08 0.08 0.10 1"/></material>
+  <material name="sensor"><color rgba="0.85 0.15 0.10 1"/></material>
+
+  <!-- base_footprint：机器人在地面上的投影点（无实体的虚拟连杆）。
+       ROS 导航约定用它做机器人的根坐标系：它始终贴地（z=0），
+       里程计和定位算法都以它为基准，SLAM/Nav2 的 base_frame 都填它。 -->
+  <link name="base_footprint"/>
+
+  <link name="base_link">
+    <visual>
+      <origin xyz="0 0 0.10"/>
+      <geometry><box size="0.42 0.32 0.12"/></geometry>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0.10"/>
+      <geometry><box size="0.42 0.32 0.12"/></geometry>
+    </collision>
+    <inertial>
+      <origin xyz="0 0 0.10"/>
+      <mass value="8.0"/>
+      <inertia ixx="0.08" ixy="0" ixz="0" iyy="0.12" iyz="0" izz="0.16"/>
+    </inertial>
+  </link>
+
+  <!-- fixed 关节 = 两连杆刚性固连，TF 是常量，由 robot_state_publisher
+       作为静态变换一次性发布 -->
+  <joint name="base_footprint_joint" type="fixed">
+    <parent link="base_footprint"/>
+    <child link="base_link"/>
+  </joint>
+
+  <!-- 轮子宏：传入名字和轮心坐标 (x, y)，生成"连杆 + 旋转关节"一套。
+       四个轮子只差安装位置，用宏避免复制粘贴四遍。 -->
+  <xacro:macro name="wheel" params="name x y">
+    <link name="${name}_wheel">
+      <visual>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+        <material name="dark"/>
+      </visual>
+      <collision>
+        <origin rpy="${pi/2} 0 0"/>
+        <geometry><cylinder radius="${wheel_radius}" length="${wheel_width}"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="0.35"/>
+        <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+      </inertial>
+    </link>
+    <!-- continuous = 可无限旋转的关节（轮子专用），转轴沿 y（滚动轴） -->
+    <joint name="${name}_wheel_joint" type="continuous">
+      <origin xyz="${x} ${y} ${wheel_radius}"/>
+      <parent link="base_link"/>
+      <child link="${name}_wheel"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- 展开宏，实例化四个轮子（坐标符号决定前后左右） -->
+  <xacro:wheel name="front_left" x="${wheel_x}" y="${wheel_y}"/>
+  <xacro:wheel name="front_right" x="${wheel_x}" y="${-wheel_y}"/>
+  <xacro:wheel name="rear_left" x="${-wheel_x}" y="${wheel_y}"/>
+  <xacro:wheel name="rear_right" x="${-wheel_x}" y="${-wheel_y}"/>
+
+  <!-- 激光雷达连杆：安装在底盘前部偏上（x=0.08, z=0.19，见 joint）。
+       frame 名 lidar_link 必须与 Gazebo 传感器的 gz_frame_id 及激光
+       消息 header.frame_id 一致，SLAM 才能正确换算激光点位置。 -->
+  <link name="lidar_link">
+    <visual>
+      <origin xyz="0 0 0.025"/>
+      <geometry><cylinder radius="0.045" length="0.05"/></geometry>
+      <material name="sensor"/>
+    </visual>
+  </link>
+  <joint name="lidar_joint" type="fixed">
+    <origin xyz="0.08 0 0.19"/>
+    <parent link="base_link"/>
+    <child link="lidar_link"/>
+  </joint>
+
+  <link name="imu_link"/>
+  <joint name="imu_joint" type="fixed">
+    <origin xyz="0 0 0.15"/>
+    <parent link="base_link"/>
+    <child link="imu_link"/>
+  </joint>
+
+  <link name="camera_link">
+    <visual>
+      <geometry><box size="0.055 0.08 0.05"/></geometry>
+      <material name="sensor"/>
+    </visual>
+  </link>
+  <joint name="camera_joint" type="fixed">
+    <origin xyz="0.23 0 0.16"/>
+    <parent link="base_link"/>
+    <child link="camera_link"/>
+  </joint>
+
+  <!-- 相机光学坐标系：ROS 图像处理约定 z 轴朝前、x 右、y 下，
+       与机器人本体约定（x 前、y 左、z 上）不同，所以要绕两个轴
+       各转 -90° 得到这个"光学朝向"的frame，视觉算法都以它为准。 -->
+  <link name="camera_optical_frame"/>
+  <joint name="camera_optical_joint" type="fixed">
+    <origin rpy="${-pi/2} 0 ${-pi/2}"/>
+    <parent link="camera_link"/>
+    <child link="camera_optical_frame"/>
+  </joint>
+</robot>

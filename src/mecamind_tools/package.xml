@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>mecamind_tools</name>
+  <version>0.1.0</version>
+  <description>MecaMind ROS2 engineering tools for sim/real project orchestration, mapping and navigation planning.</description>
+  <maintainer email="course@example.com">ROS2 AI Course</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>ament_index_python</depend>
+  <depend>action_msgs</depend>
+  <depend>nav2_amcl</depend>
+  <depend>nav2_behaviors</depend>
+  <depend>nav2_bt_navigator</depend>
+  <depend>nav2_controller</depend>
+  <depend>nav2_map_server</depend>
+  <depend>nav2_planner</depend>
+  <depend>nav2_smoother</depend>
+  <depend>geometry_msgs</depend>
+  <depend>lifecycle_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>nav2_msgs</depend>
+  <depend>nav2_simple_commander</depend>
+  <depend>nav2_velocity_smoother</depend>
+  <depend>nav2_waypoint_follower</depend>
+  <depend>python3-numpy</depend>
+  <depend>python3-yaml</depend>
+  <depend>python3-scipy</depend>
+  <depend>rosgraph_msgs</depend>
+  <depend>rclpy</depend>
+  <depend>rviz2</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>slam_toolbox</depend>
+  <depend>tf2_ros</depend>
+  <exec_depend>alsa-utils</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

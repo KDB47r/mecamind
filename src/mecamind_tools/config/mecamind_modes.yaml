@@ -1,0 +1,26 @@
+# 运行模式档案（mission_brief/调度节点使用）：每个顶层键是一套
+# "模式 + 任务"的参数组合，节点按名字加载对应档案。
+# sim 档案用仿真时间，real 档案用真实时钟——这是二者最关键的差别。
+mecamind_sim_mapping:
+  ros__parameters:
+    mode: sim
+    mission: mapping
+    output_topic: /mecamind/mission_brief
+    use_sim_time: true
+    scan_topic: /scan_raw
+    imu_topic: /imu/data_raw
+    odom_topic: /odom
+    cmd_vel_topic: /controller/cmd_vel
+    world_name: three_room_house.world
+
+mecamind_real_navigation:
+  ros__parameters:
+    mode: real
+    mission: navigation
+    output_topic: /mecamind/mission_brief
+    use_sim_time: false
+    scan_topic: /scan_raw
+    imu_topic: /imu/data_raw
+    odom_topic: /odom
+    cmd_vel_topic: /controller/cmd_vel
+    world_name: real_robot

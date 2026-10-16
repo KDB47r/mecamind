@@ -1,0 +1,22 @@
+# 环境自检清单（runbook 工具使用）：逐条执行 command 检查
+# 话题/TF/环境变量是否就绪，required: true 的项失败即整体不通过。
+# 注：话题名沿用早期约定（/scan_raw 等），对应轻量仿真节点的原始话题。
+checks:
+  - name: ros_domain_id
+    command: echo $ROS_DOMAIN_ID
+    required: true
+  - name: scan_topic
+    command: ros2 topic hz /scan_raw
+    required: true
+  - name: imu_topic
+    command: ros2 topic echo --once /imu/data_raw
+    required: true
+  - name: odom_topic
+    command: ros2 topic echo --once /odom
+    required: true
+  - name: tf_tree
+    command: ros2 run tf2_tools view_frames
+    required: true
+  - name: cmd_vel
+    command: ros2 topic info /controller/cmd_vel
+    required: true

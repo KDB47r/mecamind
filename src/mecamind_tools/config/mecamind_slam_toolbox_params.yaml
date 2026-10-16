@@ -1,0 +1,70 @@
+# SLAM Toolbox 建图参数（第二课 10.3.2 使用）。
+#
+# 【SLAM Toolbox 的工作方式速览】
+# 输入：/scan 激光 + TF odom->base_footprint（注意：不订阅 /odom 话题，
+#       里程计信息是从 TF 树上查的）。
+# 输出：/map 栅格地图 + TF map->odom（对里程计漂移的修正量）。
+# 核心算法：拿新一帧激光与已建地图做"扫描匹配"（相关性搜索），
+# 用里程计预测值缩小搜索范围，匹配结果即机器人在地图中的位姿。
+slam_toolbox:
+  ros__parameters:
+    # 仿真时间：时钟跟随 /clock，否则激光与 TF 时间戳对不上会丢帧
+    use_sim_time: true
+    # mapping = 建新图模式（另有 localization 模式：在已有图上只定位）
+    mode: mapping
+    # 三个坐标系名与全项目约定一致：map -> odom -> base_footprint
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
+    # 栅格分辨率 0.05m/格——室内建图的常用取值，太细则内存/CPU 涨
+    resolution: 0.05
+    # 与雷达实际量程（8m）一致；设大了只会引入无效数据
+    max_laser_range: 8.0
+    # 360 线激光在 >1.4m 处相邻光束间距超过一个栅格，命中数达不到 2，
+    # 距离稍远的墙体将永远无法标记为占据，因此单次命中即计入。
+    min_pass_through: 1
+    # 两次处理激光的最小间隔（秒），限流以降低 CPU 占用
+    minimum_time_interval: 0.35
+    # 查询 TF 的等待上限；tf_buffer_duration 是 TF 历史缓存长度（秒）
+    transform_timeout: 0.2
+    tf_buffer_duration: 30.0
+    # 求解器线程栈大小（字节），地图大时防止栈溢出
+    stack_size_to_use: 40000000
+    # 每 2 帧激光取 1 帧处理，进一步限流
+    throttle_scans: 2
+    # /map 话题的发布周期（秒），只影响可视化刷新，不影响建图质量
+    map_update_interval: 1.5
+    # 机器人移动超过 0.10m 或转动超过 0.10rad 才处理新帧：
+    # 静止时不重复累积数据（防止原地"越描越黑"）
+    minimum_travel_distance: 0.10
+    minimum_travel_heading: 0.10
+    # 参与匹配的近期激光帧缓存
+    scan_buffer_size: 20
+    scan_buffer_maximum_scan_distance: 8.0
+    # ---- 回环检测：回到走过的地方时识别出来，一次性消除累积误差 ----
+    do_loop_closing: true
+    # 只在 4m 半径内搜索可能的回环候选
+    loop_search_maximum_distance: 4.0
+    # 候选链至少 8 帧才认；粗/精两级匹配的响应阈值越高越保守，
+    # 宁可漏检也不要错误回环（错误回环会把整张图拉变形）
+    loop_match_minimum_chain_size: 8
+    loop_match_maximum_variance_coarse: 3.0
+    loop_match_minimum_response_coarse: 0.35
+    loop_match_minimum_response_fine: 0.45
+    # ---- 扫描匹配的相关性搜索窗口 ----
+    # 以里程计预测位姿为中心，在 0.5m 见方、步长 0.01m 的窗口内
+    # 穷举尝试，找激光与地图重合度最高的位姿
+    correlation_search_space_dimension: 0.5
+    correlation_search_space_resolution: 0.01
+    correlation_search_space_smear_deviation: 0.1
+    # 惩罚项：解偏离里程计预测越远，得分越低（信任里程计的短期精度）
+    distance_variance_penalty: 0.5
+    angle_variance_penalty: 1.0
+    # 角度搜索：先粗（步长 0.0349rad=2°，范围 ±0.349rad=±20°）后精（0.00349rad=0.2°）
+    fine_search_angle_offset: 0.00349
+    coarse_search_angle_offset: 0.349
+    coarse_angle_resolution: 0.0349
+    minimum_angle_penalty: 0.9
+    minimum_distance_penalty: 0.5
+    use_response_expansion: true

@@ -1,0 +1,225 @@
+<?xml version="1.0"?>
+<!--
+  MecaMind 麦克纳姆轮机器人的 Gazebo 模型（SDF 格式）。
+
+  【SDF 与 URDF 的分工】（初学者常混淆）
+  - SDF（本文件）：给 Gazebo 用，描述物理属性（质量、惯量、摩擦）、
+    传感器（激光/IMU/相机）和驱动插件，机器人在仿真里"怎么动"靠它；
+  - URDF（mecamind_description 包）：给 ROS 用，描述连杆装配关系，
+    robot_state_publisher 靠它发布 TF，RViz 靠它显示模型。
+  两者必须保持几何一致（轮距、雷达安装位置等），否则 TF 和物理对不上。
+
+  【模型结构】
+  底盘 base_link + 4 个麦轮 + 雷达 lidar_link + IMU + 相机，
+  末尾两个 plugin 分别发布关节状态和实现麦轮全向驱动。
+-->
+<sdf version="1.9">
+  <model name="mecamind_mecanum">
+    <!-- 与轻量仿真一致，出生在地图原点，便于共用建图路线 -->
+    <pose>0 0 0.10 0 0 0</pose>
+    <self_collide>false</self_collide>
+
+    <!-- 底盘：0.42 x 0.32 x 0.12 m 的盒子，质量 8kg。
+         inertial 的惯量矩阵影响旋转动力学，值按均匀盒子近似估算。 -->
+    <link name="base_link">
+      <inertial>
+        <mass>8.0</mass>
+        <inertia>
+          <ixx>0.08</ixx><iyy>0.12</iyy><izz>0.16</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="base_collision">
+        <pose>0 0 0.10 0 0 0</pose>
+        <geometry><box><size>0.42 0.32 0.12</size></box></geometry>
+      </collision>
+      <visual name="base_visual">
+        <pose>0 0 0.10 0 0 0</pose>
+        <geometry><box><size>0.42 0.32 0.12</size></box></geometry>
+        <material><diffuse>0.08 0.32 0.80 1</diffuse><ambient>0.05 0.20 0.50 1</ambient></material>
+      </visual>
+    </link>
+
+    <!--
+      四个麦克纳姆轮。麦轮仿真的关键全在 collision 的摩擦设置里：
+      - 碰撞体用球而不是圆柱：球与地面是单点接触，物理求解更稳定；
+      - mu 是第一摩擦方向的摩擦系数（=1.0，正常抓地），
+        mu2 是第二方向（=0.0，完全打滑）——这正是麦轮"斜向自由滚"
+        的小辊子效果的数学等价；
+      - fdir1 指定第一摩擦方向（在 base_link 坐标系下表示）：
+        左前/右后轮是 (1,-1,0)（45°斜向），右前/左后轮是 (1,1,0)。
+        对角线成对的方向布置正是麦轮能全向移动（横移/斜移）的原理。
+    -->
+    <link name="front_left_wheel">
+      <pose>0.20 0.17 0.075 0 0 0</pose>
+      <inertial><mass>0.35</mass><inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz></inertia></inertial>
+      <visual name="visual">
+        <!-- 圆柱默认轴向朝 z，绕 x 转 90°（1.5708 rad）让轮子立起来 -->
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry><cylinder><radius>0.075</radius><length>0.045</length></cylinder></geometry>
+        <material><diffuse>0.08 0.08 0.10 1</diffuse></material>
+      </visual>
+      <collision name="collision">
+        <geometry><sphere><radius>0.075</radius></sphere></geometry>
+        <surface><friction><ode><mu>1.0</mu><mu2>0.0</mu2><fdir1 gz:expressed_in="base_link">1 -1 0</fdir1></ode></friction></surface>
+      </collision>
+    </link>
+
+    <link name="front_right_wheel">
+      <pose>0.20 -0.17 0.075 0 0 0</pose>
+      <inertial><mass>0.35</mass><inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz></inertia></inertial>
+      <visual name="visual">
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry><cylinder><radius>0.075</radius><length>0.045</length></cylinder></geometry>
+        <material><diffuse>0.08 0.08 0.10 1</diffuse></material>
+      </visual>
+      <collision name="collision">
+        <geometry><sphere><radius>0.075</radius></sphere></geometry>
+        <surface><friction><ode><mu>1.0</mu><mu2>0.0</mu2><fdir1 gz:expressed_in="base_link">1 1 0</fdir1></ode></friction></surface>
+      </collision>
+    </link>
+
+    <link name="rear_left_wheel">
+      <pose>-0.20 0.17 0.075 0 0 0</pose>
+      <inertial><mass>0.35</mass><inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz></inertia></inertial>
+      <visual name="visual">
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry><cylinder><radius>0.075</radius><length>0.045</length></cylinder></geometry>
+        <material><diffuse>0.08 0.08 0.10 1</diffuse></material>
+      </visual>
+      <collision name="collision">
+        <geometry><sphere><radius>0.075</radius></sphere></geometry>
+        <surface><friction><ode><mu>1.0</mu><mu2>0.0</mu2><fdir1 gz:expressed_in="base_link">1 1 0</fdir1></ode></friction></surface>
+      </collision>
+    </link>
+
+    <link name="rear_right_wheel">
+      <pose>-0.20 -0.17 0.075 0 0 0</pose>
+      <inertial><mass>0.35</mass><inertia><ixx>0.001</ixx><iyy>0.001</iyy><izz>0.001</izz></inertia></inertial>
+      <visual name="visual">
+        <pose>0 0 0 1.5708 0 0</pose>
+        <geometry><cylinder><radius>0.075</radius><length>0.045</length></cylinder></geometry>
+        <material><diffuse>0.08 0.08 0.10 1</diffuse></material>
+      </visual>
+      <collision name="collision">
+        <geometry><sphere><radius>0.075</radius></sphere></geometry>
+        <surface><friction><ode><mu>1.0</mu><mu2>0.0</mu2><fdir1 gz:expressed_in="base_link">1 -1 0</fdir1></ode></friction></surface>
+      </collision>
+    </link>
+
+    <!-- 轮关节：revolute（旋转）关节，转轴沿 y（车身左右方向），
+         即普通轮子的滚动轴。驱动插件通过这些关节给轮子施加转速。 -->
+    <joint name="front_left_wheel_joint" type="revolute">
+      <parent>base_link</parent><child>front_left_wheel</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+    <joint name="front_right_wheel_joint" type="revolute">
+      <parent>base_link</parent><child>front_right_wheel</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+    <joint name="rear_left_wheel_joint" type="revolute">
+      <parent>base_link</parent><child>rear_left_wheel</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+    <joint name="rear_right_wheel_joint" type="revolute">
+      <parent>base_link</parent><child>rear_right_wheel</child>
+      <axis><xyz>0 1 0</xyz></axis>
+    </joint>
+
+    <!-- 2D 激光雷达：360 束、覆盖 ±180°、量程 0.12~8m、10Hz。
+         gz_frame_id 必须与 URDF 中的 TF frame 名一致（lidar_link），
+         否则 SLAM 无法把激光点换算到底盘坐标系。
+         noise 给测距加 0.005m 高斯噪声，模拟真实雷达。 -->
+    <link name="lidar_link">
+      <pose>0.08 0 0.19 0 0 0</pose>
+      <visual name="visual">
+        <geometry><cylinder><radius>0.045</radius><length>0.05</length></cylinder></geometry>
+        <material><diffuse>0.85 0.15 0.10 1</diffuse></material>
+      </visual>
+      <sensor name="lidar" type="gpu_lidar">
+        <topic>/scan</topic>
+        <gz_frame_id>lidar_link</gz_frame_id>
+        <update_rate>10</update_rate>
+        <lidar>
+          <scan>
+            <horizontal><samples>360</samples><resolution>1</resolution><min_angle>-3.14159</min_angle><max_angle>3.14159</max_angle></horizontal>
+          </scan>
+          <range><min>0.12</min><max>8.0</max><resolution>0.01</resolution></range>
+          <noise><type>gaussian</type><mean>0</mean><stddev>0.005</stddev></noise>
+        </lidar>
+        <always_on>true</always_on>
+        <visualize>true</visualize>
+      </sensor>
+    </link>
+    <!-- fixed 关节 = 刚性固连，雷达随底盘一起动，TF 是常量 -->
+    <joint name="lidar_joint" type="fixed"><parent>base_link</parent><child>lidar_link</child></joint>
+
+    <!-- IMU：50Hz 输出角速度/线加速度/姿态，可用于后续传感器融合课程 -->
+    <link name="imu_link">
+      <pose>0 0 0.15 0 0 0</pose>
+      <sensor name="imu" type="imu">
+        <topic>/imu</topic><gz_frame_id>imu_link</gz_frame_id>
+        <update_rate>50</update_rate><always_on>true</always_on>
+      </sensor>
+    </link>
+    <joint name="imu_joint" type="fixed"><parent>base_link</parent><child>imu_link</child></joint>
+
+    <link name="camera_link">
+      <pose>0.23 0 0.16 0 0 0</pose>
+      <visual name="visual">
+        <geometry><box><size>0.055 0.08 0.05</size></box></geometry>
+        <material><diffuse>0.85 0.15 0.10 1</diffuse></material>
+      </visual>
+      <sensor name="camera" type="camera">
+        <topic>/camera</topic>
+        <gz_frame_id>camera_optical_frame</gz_frame_id>
+        <update_rate>15</update_rate>
+        <camera>
+          <horizontal_fov>1.047</horizontal_fov>
+          <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+          <clip><near>0.05</near><far>20</far></clip>
+        </camera>
+        <always_on>true</always_on>
+      </sensor>
+    </link>
+    <joint name="camera_joint" type="fixed"><parent>base_link</parent><child>camera_link</child></joint>
+
+    <!-- 关节状态发布插件：把四个轮关节的角度/角速度发到 /joint_states，
+         经 bridge 桥到 ROS 后 RViz 可以显示轮子转动 -->
+    <plugin filename="gz-sim-joint-state-publisher-system" name="gz::sim::systems::JointStatePublisher">
+      <topic>/joint_states</topic>
+      <joint_name>front_left_wheel_joint</joint_name>
+      <joint_name>front_right_wheel_joint</joint_name>
+      <joint_name>rear_left_wheel_joint</joint_name>
+      <joint_name>rear_right_wheel_joint</joint_name>
+    </plugin>
+
+    <!-- 麦轮驱动插件：整台车的"运动中枢"。
+         - 订阅 /cmd_vel（vx 前后、vy 左右、wz 旋转），按麦轮逆运动学
+           解算成四个轮子的目标转速并施加到关节上；
+         - 根据轮速正运动学积分出里程计，发布 /odom 和
+           TF odom->base_footprint（经 /gz/tf 桥到 ROS）。
+         【教学要点】这份里程计来自轮速积分，而轮子（尤其麦轮横移时）
+         会打滑，所以 /odom 存在真实的累积漂移——第三课"漂移矫正"
+         专题里 AMCL 修正的就是这个误差。
+         wheel_separation/wheelbase/wheel_radius 必须与上面连杆的
+         实际几何一致，否则解算出的速度和里程计都会系统性偏差。 -->
+    <plugin filename="gz-sim-mecanum-drive-system" name="gz::sim::systems::MecanumDrive">
+      <front_left_joint>front_left_wheel_joint</front_left_joint>
+      <front_right_joint>front_right_wheel_joint</front_right_joint>
+      <back_left_joint>rear_left_wheel_joint</back_left_joint>
+      <back_right_joint>rear_right_wheel_joint</back_right_joint>
+      <wheel_separation>0.34</wheel_separation>
+      <wheelbase>0.40</wheelbase>
+      <wheel_radius>0.075</wheel_radius>
+      <topic>/cmd_vel</topic>
+      <odom_topic>/odom</odom_topic>
+      <tf_topic>/gz/tf</tf_topic>
+      <frame_id>odom</frame_id>
+      <child_frame_id>base_footprint</child_frame_id>
+      <odom_publish_frequency>30</odom_publish_frequency>
+      <min_acceleration>-1.5</min_acceleration>
+      <max_acceleration>1.5</max_acceleration>
+    </plugin>
+  </model>
+</sdf>

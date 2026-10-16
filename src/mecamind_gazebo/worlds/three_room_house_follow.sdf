@@ -1,0 +1,95 @@
+<?xml version="1.0"?>
+<!--
+  三室户教学世界（约 11.7m x 8.85m，相对原版约 1.5 倍）。
+  更大客厅/走廊便于视觉跟随绕圈，墙厚/墙高保持教学可用值。
+  第五课视觉跟随专用出生位姿。
+  【一致性要求】墙体/家具坐标必须与轻量仿真的
+  mecamind_tools/worlds/three_room_house.world 和
+  world_geometry.py / world_profiles.py 保持一致。
+-->
+<sdf version="1.9">
+  <world name="three_room_house">
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <scene>
+      <ambient>0.7 0.7 0.7 1</ambient>
+      <background>0.85 0.90 0.95 1</background>
+      <shadows>true</shadows>
+    </scene>
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 12 0 0 0</pose>
+      <diffuse>0.9 0.9 0.9 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.5 0.3 -1</direction>
+    </light>
+    <model name="ground">
+      <static>true</static>
+      <link name="ground_link">
+        <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>40 40</size></plane></geometry></collision>
+        <visual name="visual">
+          <geometry><plane><normal>0 0 1</normal><size>40 40</size></plane></geometry>
+          <material><diffuse>0.72 0.72 0.72 1</diffuse></material>
+        </visual>
+      </link>
+    </model>
+    <model name="three_room_house">
+      <static>true</static>
+      <link name="walls">
+        <collision name="north"><pose>0 4.425 0.4 0 0 0</pose><geometry><box><size>11.7 0.12 0.8</size></box></geometry></collision>
+        <visual name="north_visual"><pose>0 4.425 0.4 0 0 0</pose><geometry><box><size>11.7 0.12 0.8</size></box></geometry><material><diffuse>0.92 0.92 0.88 1</diffuse></material></visual>
+        <collision name="south"><pose>0 -4.425 0.4 0 0 0</pose><geometry><box><size>11.7 0.12 0.8</size></box></geometry></collision>
+        <visual name="south_visual"><pose>0 -4.425 0.4 0 0 0</pose><geometry><box><size>11.7 0.12 0.8</size></box></geometry><material><diffuse>0.92 0.92 0.88 1</diffuse></material></visual>
+        <collision name="west"><pose>-5.85 0 0.4 0 0 0</pose><geometry><box><size>0.12 8.85 0.8</size></box></geometry></collision>
+        <visual name="west_visual"><pose>-5.85 0 0.4 0 0 0</pose><geometry><box><size>0.12 8.85 0.8</size></box></geometry><material><diffuse>0.92 0.92 0.88 1</diffuse></material></visual>
+        <collision name="east"><pose>5.85 0 0.4 0 0 0</pose><geometry><box><size>0.12 8.85 0.8</size></box></geometry></collision>
+        <visual name="east_visual"><pose>5.85 0 0.4 0 0 0</pose><geometry><box><size>0.12 8.85 0.8</size></box></geometry><material><diffuse>0.92 0.92 0.88 1</diffuse></material></visual>
+        <collision name="divider_left"><pose>-1.8 1.5 0.4 0 0 0</pose><geometry><box><size>0.12 4.8 0.8</size></box></geometry></collision>
+        <visual name="divider_left_visual"><pose>-1.8 1.5 0.4 0 0 0</pose><geometry><box><size>0.12 4.8 0.8</size></box></geometry><material><diffuse>0.82 0.86 0.92 1</diffuse></material></visual>
+        <collision name="divider_right"><pose>2.1 -0.6 0.4 0 0 0</pose><geometry><box><size>0.12 4.8 0.8</size></box></geometry></collision>
+        <visual name="divider_right_visual"><pose>2.1 -0.6 0.4 0 0 0</pose><geometry><box><size>0.12 4.8 0.8</size></box></geometry><material><diffuse>0.82 0.86 0.92 1</diffuse></material></visual>
+        <collision name="table"><pose>-3.9 2.25 0.18 0 0 0</pose><geometry><box><size>1.0 1.0 0.36</size></box></geometry></collision>
+        <visual name="table_visual"><pose>-3.9 2.25 0.18 0 0 0</pose><geometry><box><size>1.0 1.0 0.36</size></box></geometry><material><diffuse>0.45 0.25 0.10 1</diffuse></material></visual>
+        <collision name="cabinet"><pose>4.05 -2.7 0.25 0 0 0</pose><geometry><box><size>0.75 1.2 0.5</size></box></geometry></collision>
+        <visual name="cabinet_visual"><pose>4.05 -2.7 0.25 0 0 0</pose><geometry><box><size>0.75 1.2 0.5</size></box></geometry><material><diffuse>0.25 0.45 0.25 1</diffuse></material></visual>
+        <collision name="pillar"><pose>0.75 -3.75 0.4 0 0 0</pose><geometry><box><size>0.45 0.45 0.8</size></box></geometry></collision>
+        <visual name="pillar_visual"><pose>0.75 -3.75 0.4 0 0 0</pose><geometry><box><size>0.45 0.45 0.8</size></box></geometry><material><diffuse>0.45 0.45 0.50 1</diffuse></material></visual>
+        <!-- 跟随演示障碍物（与 follow_target_mover.FOLLOW_DEMO_OBSTACLES 同步）：
+             大环回路圈内有两个 0.7m 高箱——crate_center（圈内南侧）和
+             crate_north（圈内北侧），红柱绕到背面时会被完整遮挡，
+             考验"跟丢后弧线绕行找回"；crate_east 在回路东北外侧、贴隔断墙，
+             考验小车拐弯切角时的激光避障偏置；crate_hall 在回路东侧走廊，
+             小车沿东边直线北上时它出现在右手侧，考验右侧避障偏置。 -->
+        <collision name="crate_center"><pose>-3.75 -2.0 0.35 0 0 0</pose><geometry><box><size>0.45 0.45 0.7</size></box></geometry></collision>
+        <visual name="crate_center_visual"><pose>-3.75 -2.0 0.35 0 0 0</pose><geometry><box><size>0.45 0.45 0.7</size></box></geometry><material><diffuse>0.76 0.60 0.42 1</diffuse></material></visual>
+        <collision name="crate_north"><pose>-3.75 -0.7 0.35 0 0 0</pose><geometry><box><size>0.4 0.4 0.7</size></box></geometry></collision>
+        <visual name="crate_north_visual"><pose>-3.75 -0.7 0.35 0 0 0</pose><geometry><box><size>0.4 0.4 0.7</size></box></geometry><material><diffuse>0.78 0.62 0.40 1</diffuse></material></visual>
+        <collision name="crate_east"><pose>-2.15 1.3 0.25 0 0 0</pose><geometry><box><size>0.4 0.4 0.5</size></box></geometry></collision>
+        <visual name="crate_east_visual"><pose>-2.15 1.3 0.25 0 0 0</pose><geometry><box><size>0.4 0.4 0.5</size></box></geometry><material><diffuse>0.80 0.66 0.46 1</diffuse></material></visual>
+        <collision name="crate_hall"><pose>-1.1 -2.3 0.25 0 0 0</pose><geometry><box><size>0.4 0.4 0.5</size></box></geometry></collision>
+        <visual name="crate_hall_visual"><pose>-1.1 -2.3 0.25 0 0 0</pose><geometry><box><size>0.4 0.4 0.5</size></box></geometry><material><diffuse>0.72 0.56 0.38 1</diffuse></material></visual>
+      </link>
+    </model>
+
+    <!-- 跟随演示：小车在北侧旁观，红柱在南侧空地绕圈起点（1.5x 放大布局）。 -->
+    <include>
+      <uri>model://mecamind_mecanum</uri>
+      <name>mecamind_mecanum</name>
+      <pose>-3.0 2.925 0.10 0 0 -1.5708</pose>
+    </include>
+    <include>
+      <uri>model://follow_target</uri>
+      <name>follow_target</name>
+      <pose>-3.45 0.7 0.38 0 0 0</pose>
+    </include>
+  </world>
+</sdf>

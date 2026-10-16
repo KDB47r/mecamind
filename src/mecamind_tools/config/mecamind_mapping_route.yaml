@@ -1,0 +1,36 @@
+# 半自动建图的巡场路线（第二课，mapping_route_driver 使用）。
+#
+# 坐标是世界坐标系下的路点 (x, y)，单位米。机器人从原点 (0,0) 出发，
+# 由路线驱动器依次开往每个路点。世界约 11.7m x 8.85m（相对旧版约 1.5 倍）。
+# 路线设计原则：
+#   1. 覆盖三个房间和走廊，让激光"看全"所有墙面；
+#   2. 有意折返制造回环，给 SLAM 回环检测消除累积误差的机会；
+#   3. 两个仿真后端出生点一致，因此这份路线双后端通用。
+waypoints:
+  - name: living_room_entry
+    x: 1.2
+    y: 1.2
+  - name: lower_central_hall
+    x: 0.0
+    y: -1.8
+  - name: entry_hall
+    x: -4.2
+    y: -2.7
+  - name: lower_central_hall_return
+    x: 0.0
+    y: -1.8
+  - name: upper_right_corridor
+    x: 1.2
+    y: 2.1
+  - name: bedroom_clearance
+    x: 1.2
+    y: 2.7
+  - name: bedroom_approach
+    x: 3.0
+    y: 2.7
+  - name: bedroom_right_entry
+    x: 5.1
+    y: 2.7
+  - name: bedroom_center
+    x: 5.1
+    y: -3.3

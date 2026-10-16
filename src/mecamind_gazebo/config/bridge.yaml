@@ -1,0 +1,77 @@
+# ros_gz_bridge 话题桥接映射表。
+#
+# 【背景】Gazebo 与 ROS 2 各有一套独立的通信系统（gz-transport vs DDS），
+# 消息类型也不同（gz.msgs.* vs ROS 2 msg），互相看不见对方的话题。
+# parameter_bridge 按本表逐条建立"翻译通道"，每条包含五要素：
+#   - ros_topic_name / gz_topic_name：两侧的话题名（可以不同名）
+#   - ros_type_name / gz_type_name：两侧的消息类型（必须是官方支持的配对）
+#   - direction：桥接方向。GZ_TO_ROS = 传感器数据上行；
+#     ROS_TO_GZ = 控制指令下行。单向桥省资源，也避免消息回环。
+
+# 仿真时钟：所有 ROS 节点 use_sim_time=true 时的时间来源，
+# 没有它整个系统（TF、SLAM、Nav2）都会因时间戳对不上而瘫痪。
+- ros_topic_name: /clock
+  gz_topic_name: /clock
+  ros_type_name: rosgraph_msgs/msg/Clock
+  gz_type_name: gz.msgs.Clock
+  direction: GZ_TO_ROS
+
+# 速度指令下行（唯一一条 ROS->GZ 的通道）：
+# 安全门输出的 /cmd_vel 由此进入 Gazebo 的麦轮驱动插件。
+- ros_topic_name: /cmd_vel
+  gz_topic_name: /cmd_vel
+  ros_type_name: geometry_msgs/msg/Twist
+  gz_type_name: gz.msgs.Twist
+  direction: ROS_TO_GZ
+
+# 轮式里程计上行：由麦轮驱动插件根据轮速积分得出，
+# 存在真实打滑误差（这正是第三课讲"漂移矫正"的素材）。
+- ros_topic_name: /odom
+  gz_topic_name: /odom
+  ros_type_name: nav_msgs/msg/Odometry
+  gz_type_name: gz.msgs.Odometry
+  direction: GZ_TO_ROS
+
+# 2D 激光雷达上行：SLAM 建图与 AMCL 定位的核心输入。
+- ros_topic_name: /scan
+  gz_topic_name: /scan
+  ros_type_name: sensor_msgs/msg/LaserScan
+  gz_type_name: gz.msgs.LaserScan
+  direction: GZ_TO_ROS
+
+# IMU 上行：注意两侧话题名不同（gz 侧 /imu，ROS 侧 /imu/data），
+# 桥接时顺手改名以符合 ROS 社区惯例。
+- ros_topic_name: /imu/data
+  gz_topic_name: /imu
+  ros_type_name: sensor_msgs/msg/Imu
+  gz_type_name: gz.msgs.IMU
+  direction: GZ_TO_ROS
+
+# 相机图像上行：留给后续视觉课程使用（跟随、目标检测）。
+- ros_topic_name: /camera/image_raw
+  gz_topic_name: /camera
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+
+# 相机内参上行：与图像配套，做像素<->空间换算时需要。
+- ros_topic_name: /camera/camera_info
+  gz_topic_name: /camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+
+# 关节状态上行：四个轮子的转角/转速，可供 RViz 显示轮子转动。
+- ros_topic_name: /joint_states
+  gz_topic_name: /joint_states
+  ros_type_name: sensor_msgs/msg/JointState
+  gz_type_name: gz.msgs.Model
+  direction: GZ_TO_ROS
+
+# 动态 TF 上行：麦轮驱动插件发布的 odom->base_footprint 变换。
+# gz 侧走 /gz/tf 再桥到 ROS 标准的 /tf，SLAM/Nav2 由此拿到里程计位姿。
+- ros_topic_name: /tf
+  gz_topic_name: /gz/tf
+  ros_type_name: tf2_msgs/msg/TFMessage
+  gz_type_name: gz.msgs.Pose_V
+  direction: GZ_TO_ROS

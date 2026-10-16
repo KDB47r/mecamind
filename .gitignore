@@ -1,0 +1,42 @@
+build/
+install/
+log/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.local.yaml
+*.log
+.venv/
+
+# 建图产物默认不入库；需要保留的地图用 git add -f 强制提交
+maps/*.pgm
+maps/*.yaml
+maps/*.json
+maps/*.png
+
+# 内部课程规划与 Markdown 讲义源稿，仅发布最终 PDF
+PROJECT_PLAN.md
+docs/*.md
+
+# 讲师授课稿（内部用，md/pdf 均不入库）
+docs/10.3.5_讲师授课稿_120分钟_详解版.*
+
+# md2pdf 本地依赖（只提交 package.json / package-lock.json / render.mjs）
+scripts/md2pdf/node_modules/
+node_modules/
+
+# 根目录误放的权重副本（正式权重在 models/，需要入库）
+/*.pt
+/*.onnx
+
+# 运行垃圾
+frames_2026-10-14_20.12.02.gv
+# pdf文档
+*.pdf
+# 课程久代码
+extra-code/
+
+# 知识清单 课程文档
+extra-docs/
+docs/
+Old_README.md
