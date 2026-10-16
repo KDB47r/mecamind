@@ -332,7 +332,13 @@ class MissionExecutorNode(Node):
         """按 intent 进入对应模式（确认通过后的真正执行入口）。"""
         mode = next_mission_mode(intent)
         if mode == "idle":
-            self._stop_all("stopped" if intent == "stop" else "canceled")
+            if intent in {"stop", "cancel"}:
+                self._stop_all("stopped" if intent == "stop" else "canceled")
+            else:
+                # 不支持/无法理解的意图（如 LLM 不可用时的 unknown）：
+                # 不动现有任务，明确告知用户，而不是播完"开始执行"后沉默。
+                self._publish_reply(f"抱歉，我还不会执行「{target or intent}」，请换个说法。")
+                self._set_state("idle", f"unsupported_intent:{intent}", target)
             return
         if mode == "follow":
             self._enter_follow()

@@ -12,6 +12,7 @@
 | 目标检测 | YOLOv8n 多线程推理，检测目标并在图像上可视化 |
 | 视觉跟随 | 锁定检测目标（默认 person），按检测框偏移控制小车跟随 |
 | 语音播报 | 收到任务、执行状态、确认提示均有语音回复（TTS 合成后播放） |
+| 语音闲聊（联网） | 天气、新闻等实时问题调用带联网搜索的大模型如实回答；闲聊只回话、不打断导航/巡逻任务 |
 | 安全机制 | 速度仲裁器（急停 > 遥控 > 跟随 > 导航）+ 激光安全门 + 速度平滑限幅 |
 | 任务闭环 | 含糊指令先确认再执行；停止/取消/确认/方向点动走本地规则，零延迟、不依赖网络 |
 
@@ -73,7 +74,7 @@ ros2 launch mecamind_bringup navigation.launch.py
 ros2 launch mecamind_tools mecamind_aliyun_voice.launch.py
 ```
 
-对麦克风说"小度小度 去卧室"（唤醒词默认 `小度小度`，可用 `wake_words` 参数配置）。支持的指令：去某房间 / 巡逻 / 停止 / 取消 / 前进后退左转右转 / 跟随 / 建图；含糊指令会先语音询问确认。
+对麦克风说"小度小度 去卧室"（唤醒词默认 `小度小度`，可用 `wake_words` 参数配置）。支持的指令：去某房间 / 巡逻 / 停止 / 取消 / 前进后退左转右转 / 跟随 / 建图；含糊指令会先语音询问确认。天气、新闻等闲聊问题走联网搜索如实回答（不编造、不打断任务）。
 
 跳过语音的文本直测：
 
@@ -94,6 +95,7 @@ ros2 launch mecamind_bringup follow.launch.py       # 视觉跟随（默认跟 p
 麦克风 → voice_listen（能量门限 + 唤醒词）→ 流式 ASR → 指令文本
         → task_scheduler（本地规则 + 大模型解析）→ task_command（JSON）
         → mission_executor → Nav2 → 速度仲裁器 → 激光安全门 → 小车
+闲聊分支：task_scheduler 判定为 chat → 带联网搜索的大模型二次调用 → 只回复、不发任务
 回复：task_scheduler / mission_executor → robot_reply → TTS → 扬声器
 ```
 

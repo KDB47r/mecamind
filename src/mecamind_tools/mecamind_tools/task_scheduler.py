@@ -75,7 +75,7 @@ class TaskCommand:
     与 aliyun_clients.AliyunTaskPlan 字段一致，但属于本模块自己的类型——
     刻意做这层转换是为了让下游模块只依赖 TaskCommand，不感知
     "命令是规则解析的还是 LLM 解析的"。字段含义：
-    - intent: stop/cancel/confirm/patrol/follow/mapping/navigate/unknown；
+    - intent: stop/cancel/confirm/patrol/follow/mapping/navigate/move/chat/unknown；
     - target: 导航目标名（房间/路点）；
     - requires_confirmation: True 表示指令含糊，执行前需要用户确认；
     - reply: 播报给用户听的回复语。
@@ -150,7 +150,7 @@ def task_command_from_aliyun_plan(plan: AliyunTaskPlan) -> TaskCommand:
     TaskCommand，将来换掉 LLM 供应商时只需要改这一个转换函数。
     """
     reply = plan.reply
-    if plan.requires_confirmation and plan.intent not in {"stop", "cancel", "confirm"}:
+    if plan.requires_confirmation and plan.intent not in {"stop", "cancel", "confirm", "chat"}:
         if "确认" not in reply:
             label = plan.intent if not plan.target else f"{plan.intent} {plan.target}"
             reply = f"请确认是否执行：{label}？说确认或取消。"
@@ -191,6 +191,15 @@ class TaskSchedulerNode(Node):
             base_url=str(self.get_parameter("dashscope_base_url").value),
             timeout_sec=float(self.get_parameter("llm_timeout_sec").value),
         )
+        # 聊天客户端：与任务解析共用同一个模型和密钥，但开启联网搜索
+        # （enable_search），天气/新闻等时效性问题基于真实搜索结果回答。
+        self.chat_client = AliyunLlmClient(
+            model=str(self.get_parameter("llm_model").value),
+            api_key_env=str(self.get_parameter("api_key_env").value),
+            base_url=str(self.get_parameter("dashscope_base_url").value),
+            timeout_sec=float(self.get_parameter("llm_timeout_sec").value),
+            enable_search=True,
+        )
         self.get_logger().info("MecaMind task scheduler ready")
 
     def _cb(self, msg: String) -> None:
@@ -199,6 +208,21 @@ class TaskSchedulerNode(Node):
         self.get_logger().info(
             f"Voice text {msg.data!r} -> intent={command.intent} target={command.target!r}"
         )
+        # 闲聊不是任务：只回话、不发布 task_command，
+        # 避免 mission_executor 把聊天内容当成"待确认指令"挂起整条任务管线。
+        if command.intent == "chat":
+            reply = command.reply
+            try:
+                # 二次调用带联网搜索的聊天客户端，拿到基于真实信息的回复；
+                # 失败则退回任务 LLM 已生成的回复（仍有话可播，不瘫痪）。
+                reply = self.chat_client.chat(msg.data) or reply
+            except Exception as exc:  # noqa: BLE001
+                self.get_logger().warn(f"Aliyun chat LLM failed, using fallback reply: {exc}")
+            if reply:
+                reply_msg = String()
+                reply_msg.data = reply
+                self.reply_pub.publish(reply_msg)
+            return
         output = String()
         output.data = command.to_json()
         self.pub.publish(output)

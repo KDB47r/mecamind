@@ -46,7 +46,7 @@ class AliyunTaskPlan:
 
     frozen=True 让实例不可变：解析结果一旦生成就不应该被下游偷偷修改，
     出问题时更容易定位。字段含义：
-    - intent: 任务意图，只允许固定集合（stop/cancel/patrol/follow/mapping/navigate/unknown）；
+    - intent: 任务意图，只允许固定集合（stop/cancel/confirm/patrol/follow/mapping/navigate/move/chat/unknown）；
     - target: 导航目标（房间名、路点名），非导航任务时为空串；
     - requires_confirmation: 指令含糊或有风险时为 True，提示上层先向用户确认再执行；
     - reply: 机器人回复给用户的话，后续会送去 TTS 播报。
@@ -63,23 +63,43 @@ def _env_value(name: str) -> str:
     return os.environ.get(name, "").strip()
 
 
+def _workspace_src_config_candidates() -> list[Path]:
+    """从"本文件位置"和"当前工作目录"向上找 ROS 工作空间里的源码配置目录。
+
+    colcon 安装后的包不会携带 *.local.yaml（setup.py 刻意排除私密配置），
+    而密钥文件通常放在工作空间的 src/mecamind_tools/config/ 下——仅靠
+    "包目录旁 config/" 找不到密钥。向上逐级搜 <root>/src/mecamind_tools/config/
+    即可同时覆盖源码运行和安装后运行两种情况。
+    """
+    found: list[Path] = []
+    for anchor in (Path(__file__).resolve(), Path.cwd()):
+        for parent in anchor.parents:
+            path = parent / "src" / "mecamind_tools" / "config" / LOCAL_CREDENTIALS_FILENAME
+            if path.is_file():
+                found.append(path)
+                break
+    return found
+
+
 def _credential_config_candidates() -> list[Path]:
     """按优先级列出凭据 YAML 文件的所有候选路径。
 
     查找顺序（先找到先用）：
     1. 环境变量 MECAMIND_ALIYUN_CONFIG 显式指定的路径（用户手动指定优先级最高）；
-    2. 本包源码目录旁的 config/ 目录（开发时最方便）；
-    3. 当前工作目录下的 config/（在工作区根目录启动节点时能命中）；
-    4. 用户主目录 ~/.config/mecamind/（跨项目共享的全局配置）。
+    2. 本包源码目录旁的 config/ 目录（源码运行）；
+    3. 工作空间源码树里的 config/（安装后运行时的兜底）；
+    4. 当前工作目录下的 config/（在工作区根目录启动节点时能命中）；
+    5. 用户主目录 ~/.config/mecamind/（跨项目共享的全局配置）。
     """
     candidates = []
     configured_path = _env_value("MECAMIND_ALIYUN_CONFIG")
     if configured_path:
         candidates.append(Path(configured_path).expanduser())
 
+    candidates.append(Path(__file__).resolve().parents[1] / "config" / LOCAL_CREDENTIALS_FILENAME)
+    candidates.extend(_workspace_src_config_candidates())
     candidates.extend(
         [
-            Path(__file__).resolve().parents[1] / "config" / LOCAL_CREDENTIALS_FILENAME,
             Path.cwd() / "config" / LOCAL_CREDENTIALS_FILENAME,
             Path("~/.config/mecamind").expanduser() / LOCAL_CREDENTIALS_FILENAME,
         ]
@@ -177,7 +197,7 @@ def parse_task_plan_payload(payload: str, fallback_text: str = "") -> AliyunTask
     if not isinstance(data, dict):
         raise ValueError("LLM task payload must be a JSON object")
     intent = str(data.get("intent", "unknown")).strip().lower() or "unknown"
-    allowed = {"stop", "cancel", "confirm", "patrol", "follow", "mapping", "navigate", "move", "unknown"}
+    allowed = {"stop", "cancel", "confirm", "patrol", "follow", "mapping", "navigate", "move", "chat", "unknown"}
     if intent not in allowed:
         intent = "unknown"
     return AliyunTaskPlan(
@@ -198,13 +218,36 @@ def build_task_parser_messages(text: str) -> list[dict[str, str]]:
     system = (
         "You are the task parser for a ROS 2 indoor mobile robot. "
         "Convert the user's command into strict JSON only. "
-        "Allowed intents are stop, cancel, confirm, patrol, follow, mapping, navigate, move, unknown. "
+        "Allowed intents are stop, cancel, confirm, patrol, follow, mapping, navigate, move, chat, unknown. "
         "Use target for room or waypoint names. "
         "For short relative motions (go forward, back up, turn left, turn right) use intent move "
         "with target one of forward, backward, left, right. "
         "Set requires_confirmation true when the command is ambiguous or risky. "
+        "If the user's message is NOT a robot task but small talk or a question "
+        "(greetings, jokes, weather, daily chat), use intent chat with empty target, "
+        "requires_confirmation false, and a friendly natural reply of 1-2 sentences "
+        "suitable for voice playback. "
         "The JSON schema is: "
         '{"intent":"navigate","target":"bedroom","requires_confirmation":false,"reply":"OK"}'
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": text},
+    ]
+
+
+def build_chat_messages(text: str) -> list[dict[str, str]]:
+    """构造闲聊模式的对话消息列表（system 提示词 + 用户原话）。
+
+    与任务解析提示词的区别：把 LLM 约束成"家用扫地机器人的聊天人格"，
+    输出纯口语文本（不是 JSON），供 TTS 直接播报；配合 enable_search
+    使用时，天气、新闻等时效性问题会基于真实搜索结果回答。
+    """
+    system = (
+        "你是一台家用扫地机器人，性格友好、语气自然，用中文口语回答。 "
+        "回答保持 1~2 句话，适合语音播报，不要输出 markdown 或列表。 "
+        "涉及天气、新闻等实时信息时，基于搜索结果如实回答，"
+        "搜索不到的内容不要编造。"
     )
     return [
         {"role": "system", "content": system},
@@ -228,6 +271,7 @@ class AliyunLlmClient:
         api_key_env: str = "DASHSCOPE_API_KEY",
         base_url: str = DEFAULT_DASHSCOPE_BASE_URL,
         timeout_sec: float = 15.0,
+        enable_search: bool = False,
         opener: Callable[[request.Request, float], Any] | None = None,
     ) -> None:
         self.model = model
@@ -235,23 +279,36 @@ class AliyunLlmClient:
         # 去掉末尾的 '/'，避免后面拼接 URL 时出现 "//chat/completions"。
         self.base_url = base_url.rstrip("/")
         self.timeout_sec = timeout_sec
+        # 联网搜索开关：请求体里加 enable_search 字段即可生效，
+        # 无需在百炼控制台做任何配置（聊天客户端会开启它）。
+        self.enable_search = enable_search
         self._opener = opener or request.urlopen
 
-    def parse_task(self, text: str) -> AliyunTaskPlan:
-        """调用 LLM，把一句自然语言指令解析成 AliyunTaskPlan。
+    def _post_chat(
+        self,
+        messages: list[dict[str, str]],
+        temperature: float,
+        json_mode: bool = False,
+    ) -> str:
+        """POST 到兼容模式的 chat/completions，返回 choices[0].message.content。
 
-        完整流程：取 API Key -> 组装 JSON 请求体 -> POST -> 解析响应。
-        temperature=0.0 让模型输出尽量确定（同样的输入尽量给同样的输出），
-        任务解析场景需要稳定性而不是创造性；response_format 要求服务端
-        强制返回 JSON 对象，进一步降低格式出错概率。
+        parse_task 和 chat 共用这段 HTTP 逻辑（取 Key -> 组装请求 -> POST -> 解析）。
+        json_mode=True 时要求服务端强制返回 JSON 对象（任务解析用）；
+        enable_search=True 时请求体带联网搜索开关，模型仅在需要时效性
+        信息时触发搜索，把搜索结果作为上下文参与回答。
         """
         api_key = _require_api_key(self.api_key_env)
-        payload = {
+        payload: dict[str, Any] = {
             "model": self.model,
-            "messages": build_task_parser_messages(text),
-            "temperature": 0.0,
-            "response_format": {"type": "json_object"},
+            "messages": messages,
+            "temperature": temperature,
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        if self.enable_search:
+            # 联网搜索是请求体参数，无需在百炼控制台开启；
+            # 默认搜索策略随模型调用计费，只有 agent 策略才额外收费。
+            payload["enable_search"] = True
         raw = json.dumps(payload).encode("utf-8")
         req = request.Request(
             f"{self.base_url}/chat/completions",
@@ -277,8 +334,31 @@ class AliyunLlmClient:
 
         # OpenAI 兼容格式：真正的模型回复藏在 choices[0].message.content 里。
         data = json.loads(body)
-        content = data["choices"][0]["message"]["content"]
+        return data["choices"][0]["message"]["content"]
+
+    def parse_task(self, text: str) -> AliyunTaskPlan:
+        """调用 LLM，把一句自然语言指令解析成 AliyunTaskPlan。
+
+        temperature=0.0 让模型输出尽量确定（同样的输入尽量给同样的输出），
+        任务解析场景需要稳定性而不是创造性；json_mode 要求服务端
+        强制返回 JSON 对象，进一步降低格式出错概率。
+        """
+        content = self._post_chat(
+            build_task_parser_messages(text),
+            temperature=0.0,
+            json_mode=True,
+        )
         return parse_task_plan_payload(content, fallback_text=text)
+
+    def chat(self, text: str) -> str:
+        """以聊天人格调用 LLM，返回适合 TTS 播报的自然语言回复（非 JSON）。
+
+        与 parse_task 的区别：闲聊提示词、temperature 略高让语气自然；
+        本实例通常以 enable_search=True 构造——天气、新闻等时效性问题
+        会基于真实搜索结果回答，而不是凭空编造。
+        """
+        content = self._post_chat(build_chat_messages(text), temperature=0.7)
+        return content.strip() or "抱歉，我一时没想好怎么回答。"
 
 
 def _set_dashscope_runtime(api_key_env: str, websocket_url: str = "") -> Any:

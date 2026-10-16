@@ -411,7 +411,17 @@ class AliyunAsrFileNode(Node):
         )
         self.get_logger().info("MecaMind Aliyun ASR file bridge ready")
 
-    def _publish_failure(self, code: str, reply: str, detail: str) -> None:
+    def _publish_failure(self, code: str, reply: str, detail: str, woken: bool = True) -> None:
+        if not woken:
+            # 未唤醒会话的失败绝大多数是环境噪音误触发，静默丢弃；
+            # 但鉴权/配额/网络这类"配置级"错误必须让用户知道，
+            # 按 30 秒限频播报，避免噪音持续触发时反复插话。
+            if code not in {"auth", "quota", "network"}:
+                return
+            now = time.time()
+            if now - self._last_failure_announce_at < 30.0:
+                return
+            self._last_failure_announce_at = now
         self._fail_count += 1
         max_retries = int(self.get_parameter("max_retries").value)
         if self._fail_count >= max_retries:
@@ -484,6 +494,9 @@ class AliyunAsrStreamNode(Node):
         self._session: AliyunStreamingRecognition | None = None
         self._fail_count = 0
         self._last_text = ""
+        # 当前会话是否已被唤醒（PCM 帧 phase=command 置位），失败播报据此降噪。
+        self._session_woken = False
+        self._last_failure_announce_at = 0.0
 
         self.partial_pub = self.create_publisher(
             String, str(self.get_parameter("asr_partial_topic").value), 20
@@ -511,6 +524,9 @@ class AliyunAsrStreamNode(Node):
     def _ensure_session(self) -> AliyunStreamingRecognition:
         if self._session is not None:
             return self._session
+        # 新会话开始：清除上一会话的唤醒标记。唤醒信息来自 PCM 帧的 phase 字段
+        # （voice_listen 听到唤醒词后把后续帧标为 command），由 _pcm_cb 逐帧更新。
+        self._session_woken = False
 
         def on_partial(text: str) -> None:
             self._last_text = text
@@ -539,13 +555,15 @@ class AliyunAsrStreamNode(Node):
         except Exception as exc:  # noqa: BLE001
             self.get_logger().warn(f"Invalid PCM payload: {exc}")
             return
+        # voice_listen 在每帧里带 phase：听到唤醒词后的帧标为 command。
+        self._session_woken = self._session_woken or str(data.get("phase", "")) == "command"
         try:
             session = self._ensure_session()
             session.send_audio_frame(pcm)
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"Streaming ASR send failed: {exc}")
             code, reply = classify_voice_failure(exc)
-            self._publish_failure(code, reply, str(exc))
+            self._publish_failure(code, reply, str(exc), woken=self._session_woken)
             self._reset_session()
 
     def _pcm_end_cb(self, msg: String) -> None:
