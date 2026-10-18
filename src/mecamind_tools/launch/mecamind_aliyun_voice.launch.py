@@ -52,6 +52,7 @@ def _launch_setup(context, *args, **kwargs):
     microphone_output_dir = LaunchConfiguration("microphone_output_dir")
     wake_words = LaunchConfiguration("wake_words")
     energy_threshold = LaunchConfiguration("energy_threshold")
+    wake_hold_sec = LaunchConfiguration("wake_hold_sec")
     playback_backend = LaunchConfiguration("playback_backend")
 
     continuous = PythonExpression(["'", listen_mode, "' == 'continuous'"])
@@ -80,6 +81,12 @@ def _launch_setup(context, *args, **kwargs):
                 {
                     "energy_threshold": ParameterValue(
                         energy_threshold,
+                        value_type=float,
+                    )
+                },
+                {
+                    "wake_hold_sec": ParameterValue(
+                        wake_hold_sec,
                         value_type=float,
                     )
                 },
@@ -256,6 +263,11 @@ def generate_launch_description():
                 description="唤醒词（逗号分隔子串匹配）：小度小度 + 同音误转写兜底",
             ),
             DeclareLaunchArgument("energy_threshold", default_value="450.0"),
+            DeclareLaunchArgument(
+                "wake_hold_sec",
+                default_value="30.0",
+                description="唤醒后免唤醒追问窗口（秒）：期间再开口说话无需重复唤醒词，0 禁用",
+            ),
             DeclareLaunchArgument("playback_backend", default_value="auto"),
             OpaqueFunction(function=_launch_setup),
         ]

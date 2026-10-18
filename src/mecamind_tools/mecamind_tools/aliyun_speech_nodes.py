@@ -31,6 +31,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -760,8 +761,13 @@ class TtsPlaybackNode(Node):
         super().__init__("mecamind_tts_playback")
         self.declare_parameter("input_topic", "/mecamind/tts_audio_file")
         self.declare_parameter("status_topic", "/mecamind/tts_status")
+        # barge-in 打断话题：voice_listen 在播报中听到唤醒词时发布消息打断播放。
+        self.declare_parameter("stop_topic", "/mecamind/tts_stop")
         self.declare_parameter("playback_backend", "auto")
         self._busy = False
+        self._proc: subprocess.Popen | None = None
+        self._interrupted = False
+        self._proc_lock = threading.Lock()
         self.status_pub = self.create_publisher(
             String, str(self.get_parameter("status_topic").value), 10
         )
@@ -769,6 +775,12 @@ class TtsPlaybackNode(Node):
             String,
             str(self.get_parameter("input_topic").value),
             self._play_cb,
+            10,
+        )
+        self.create_subscription(
+            String,
+            str(self.get_parameter("stop_topic").value),
+            self._stop_cb,
             10,
         )
         self._publish_status("idle")
@@ -801,20 +813,44 @@ class TtsPlaybackNode(Node):
                 str(self.get_parameter("playback_backend").value)
             )
             command = build_playback_command(backend, executable, str(audio))
-            subprocess.run(
-                command,
-                check=True,
-                timeout=60.0,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
-            self._publish_status("idle", f"backend={backend}", str(audio))
+            # 用 Popen 而不是 run：barge-in 打断回调需要拿到进程句柄才能 kill。
+            with self._proc_lock:
+                self._interrupted = False
+                self._proc = subprocess.Popen(
+                    command,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE,
+                )
+            self._proc.wait(timeout=60.0)
+            with self._proc_lock:
+                interrupted = self._interrupted
+                self._proc = None
+            if interrupted:
+                self._publish_status("idle", "interrupted", str(audio))
+                self.get_logger().info("TTS playback interrupted (barge-in)")
+            else:
+                self._publish_status("idle", f"backend={backend}", str(audio))
+        except subprocess.TimeoutExpired:
+            with self._proc_lock:
+                if self._proc is not None:
+                    self._proc.kill()
+                    self._proc = None
+            self.get_logger().error("TTS playback timed out")
+            self._publish_status("failed", "timeout", str(audio))
         except Exception as exc:  # noqa: BLE001
             self.get_logger().error(f"TTS playback failed: {exc}")
             self._publish_status("failed", str(exc), str(audio))
         finally:
             self._busy = False
+
+    def _stop_cb(self, msg: String) -> None:
+        """barge-in 打断：播报中听到唤醒词时由 voice_listen 发布，立刻停止播放。"""
+        with self._proc_lock:
+            proc = self._proc
+            self._interrupted = True
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+            self.get_logger().info("TTS playback stopped (barge-in)")
 
 
 def asr_main(args=None) -> None:
@@ -866,12 +902,20 @@ def tts_main(args=None) -> None:
 
 
 def tts_playback_main(args=None) -> None:
-    """TTS 播放节点入口。"""
+    """TTS 播放节点入口。
+
+    必须用 MultiThreadedExecutor：_play_cb 会阻塞到播放结束，
+    单线程 executor 下 /mecamind/tts_stop 的打断回调永远排不上队，
+    barge-in 就会失效。
+    """
     rclpy.init(args=args)
     node = TtsPlaybackNode()
+    executor = rclpy.executors.MultiThreadedExecutor()
     try:
-        rclpy.spin(node)
+        executor.add_node(node)
+        executor.spin()
     finally:
+        executor.remove_node(node)
         node.destroy_node()
         rclpy.shutdown()
 

@@ -167,7 +167,14 @@ class VoiceListenNode(Node):
         # 唤醒词「小度小度」：ASR 常转写成「小度，小度」（带标点），
         # 所以列表用单个「小度」做子串兜底；「小杜/小渡/小肚」是同音误转写兜底。
         self.declare_parameter("wake_words", "小度小度,小度,小杜,小渡,小肚")
-        self.declare_parameter("pause_while_tts", True)
+        # 默认 False（barge-in 模式）：播报期间继续听，说唤醒词可打断播报；
+        # 设为 True 回到"播报时完全暂停采麦"的旧行为（防扬声器回声）。
+        self.declare_parameter("pause_while_tts", False)
+        # barge-in 打断话题：播报中听到唤醒词时向 TTS 播放节点发消息。
+        self.declare_parameter("tts_stop_topic", "/mecamind/tts_stop")
+        # 免唤醒追问窗口：唤醒会话结束后 wake_hold_sec 秒内再开口说话，
+        # 无需重复唤醒词（多轮对话体验）；设为 0 则关闭该行为。
+        self.declare_parameter("wake_hold_sec", 30.0)
 
         self._mode = str(self.get_parameter("listen_mode").value).strip().lower()
         self._wake_words = [
@@ -179,6 +186,8 @@ class VoiceListenNode(Node):
         self._woken = False
         self._expect_result = False
         self._session_woken = False
+        self._wake_hold_until = 0.0
+        self._session_during_tts = False
         self._capture_started_at = 0.0
         self._last_voice_at = 0.0
         self._tts_playing = False
@@ -200,6 +209,9 @@ class VoiceListenNode(Node):
         )
         self.reply_pub = self.create_publisher(
             String, str(self.get_parameter("robot_reply_topic").value), 10
+        )
+        self.tts_stop_pub = self.create_publisher(
+            String, str(self.get_parameter("tts_stop_topic").value), 10
         )
         self.create_subscription(
             String,
@@ -365,6 +377,9 @@ class VoiceListenNode(Node):
                         self._capture_started_at = now
                         self._last_voice_at = now
                         self._latest_partial = ""
+                        # 记录会话开始时是否正在播报：播报期间的回声会话
+                        # 不允许免唤醒窗口放行，只有说出唤醒词（barge-in）才算唤醒。
+                        self._session_during_tts = self._tts_playing
                         self.get_logger().info(
                             f"Capture start (rms={rms:.0f} > thr={energy_threshold:.0f})"
                         )
@@ -441,17 +456,39 @@ class VoiceListenNode(Node):
             self._latest_partial = text
             if self._state == "idle":
                 return
+            wake_hold_sec = float(self.get_parameter("wake_hold_sec").value)
+            # 播报期间不允许"免唤醒窗口"放行：机器人自己的播报声会被麦克风
+            # 听到（回声），只有真正说出唤醒词才算唤醒。
+            in_hold = (
+                wake_hold_sec > 0
+                and time.time() < self._wake_hold_until
+                and not self._tts_playing
+            )
             if not self._woken and (
-                not self._wake_words or text_contains_wake_word(text, self._wake_words)
+                not self._wake_words
+                or text_contains_wake_word(text, self._wake_words)
+                or in_hold
             ):
                 self._woken = True
                 self._capture_started_at = time.time()
                 self._last_voice_at = time.time()
                 self._publish_status("listening", text)
+                if in_hold:
+                    # 免唤醒窗口内的追问：识别到语音即算唤醒，并续满窗口。
+                    self._wake_hold_until = time.time() + wake_hold_sec
+                elif self._tts_playing:
+                    # barge-in：播报中听到唤醒词 → 立刻打断播报，腾出麦克风。
+                    stop = String()
+                    stop.data = "barge_in"
+                    self.tts_stop_pub.publish(stop)
                 # 注意：这里不播报「我在」——用户通常一口气说完
                 # 「小度小度停止」，此刻插播 TTS 会暂停采麦、掐断后半句。
                 # 只有最终结果里确实只有唤醒词时，_result_cb 才会提示。
-                self.get_logger().info(f"Wake word heard: {text!r}")
+                self.get_logger().info(
+                    f"Follow-up command (hold window): {text!r}"
+                    if in_hold
+                    else f"Wake word heard: {text!r}"
+                )
 
     def _result_cb(self, msg: String) -> None:
         """流式会话结束时的最终结果：已唤醒则发出 voice_command。"""
@@ -468,6 +505,11 @@ class VoiceListenNode(Node):
             self._state = "idle"
             self._woken = False
             self._publish_status("idle", "command_ready" if text else "empty_result")
+            # 唤醒过（含免唤醒窗口内的追问）的会话：续满免唤醒窗口，
+            # 之后 wake_hold_sec 秒内再开口说话无需重复唤醒词。
+            wake_hold_sec = float(self.get_parameter("wake_hold_sec").value)
+            if woken and wake_hold_sec > 0:
+                self._wake_hold_until = time.time() + wake_hold_sec
 
         if not text:
             # 只有确实被唤醒过的会话才值得口头提示；
@@ -475,8 +517,12 @@ class VoiceListenNode(Node):
             if woken:
                 self._publish_reply("没听清，请再说一遍。")
             return
+        in_hold = time.time() < self._wake_hold_until
         if not woken and self._wake_words and not text_contains_wake_word(text, self._wake_words):
-            return
+            # 免唤醒窗口内的语音同样放行（部分识别结果迟到、漏掉追问唤醒时的兜底）；
+            # 但播报期间的回声会话除外——机器人自己的声音不算追问。
+            if not in_hold or self._session_during_tts:
+                return
         command = strip_wake_words(text, self._wake_words) if self._wake_words else text.strip()
         if not command:
             self._publish_reply("我在，请说具体指令。" if woken or text_contains_wake_word(text, self._wake_words) else "没听清指令，请再说一遍。")

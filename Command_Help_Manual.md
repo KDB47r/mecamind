@@ -153,8 +153,9 @@ ros2 topic echo /mecamind/mission_state    # 状态 JSON：mode/detail 字段
 | `topic does not appear to be published yet` | 语音链路没启动，或监听台开在了链路之前。先开 1/2，等就绪后再开 echo |
 | `Package 'mecamind_tools' not found` | 当前终端没 `source install/setup.bash` |
 | 文本命令报"没有这个文件或目录" | `ros2 topic pub` 命令被拆成两行了，必须一整行 |
-| 开麦时车"听不到"我 | TTS 播放期间麦克风暂停采集（pause_while_tts），等它说完；或检查终端 2 的能量门限标定值是否过高 |
+| 开麦时车"听不到"我 | 检查终端 2 的能量门限标定值是否过高；播报中直接说唤醒词即可打断（barge-in）。想回到"播报时完全静音"用 `pause_while_tts:=true` |
 | 文本注入有回复但车不动 | mission_executor 在终端 1，未启动则只解析不执行 |
 | 闲聊回复要等 3~5 秒才播报 | 正常：chat 走两次 LLM 调用（意图判定 + 联网搜索回答） |
 | 回复"已改用本地理解…"并要求确认 | LLM 调用失败（密钥没找到/网络问题）自动降级规则；看终端 2 的 `Aliyun LLM task parsing failed` 日志定位原因 |
 | 环境有噪音时一直播"语音识别失败" | 已修复：未唤醒（没说唤醒词）的会话失败静默丢弃；鉴权/配额/网络错误最多 30 秒播报一次 |
+| 每句话都要说一遍唤醒词 | 唤醒后有 30 秒免唤醒追问窗口（`wake_hold_sec` 参数，0 禁用），期间直接开口说话即可；唤醒后单句内的静音容忍度由 `silence_sec` 控制 |
